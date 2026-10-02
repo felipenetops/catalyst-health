@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consulta — Saúde dos clientes</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #eef2f4;
+    color: #1c2830;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 28px 20px 48px; }
+  h1 { margin: 0 0 8px; font-size: 1.5rem; }
+  .intro, .file-help { margin: 0 0 18px; color: #5c6b76; }
+  .file-help {
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #fff4d6;
+    color: #1c2830;
+  }
+  form {
+    display: grid;
+    gap: 14px;
+    background: #fff;
+    border: 1px solid #d5dee4;
+    border-radius: 14px;
+    padding: 18px;
+  }
+  label { display: flex; flex-direction: column; gap: 6px; font-size: 0.82rem; color: #5c6b76; }
+  input, select {
+    font: inherit;
+    color: #1c2830;
+    border: 1px solid #d5dee4;
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #fff;
+  }
+  .check { flex-direction: row; align-items: center; color: #1c2830; }
+  .check input { width: auto; }
+  .period { display: grid; gap: 8px; }
+  .period p { margin: 0; font-size: 0.82rem; color: #5c6b76; }
+  .shortcuts, .range { display: flex; flex-wrap: wrap; gap: 8px; }
+  .range label { flex: 1; min-width: 220px; }
+  button {
+    font: inherit;
+    border-radius: 8px;
+    border: 1px solid #d5dee4;
+    background: #fff;
+    color: #0e5f73;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  button.submit { background: #0e5f73; color: #fff; border-color: #0e5f73; }
+  button:disabled { opacity: 0.6; cursor: wait; }
+  .error {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #fdecea;
+    color: #b42318;
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Assurance — Saúde dos clientes</h1>
+  <p class="intro">A senha é usada só nesta consulta e não fica gravada na página nem no relatório.</p>
+  <p id="file-help" class="file-help" hidden>
+    Para consultar no Windows, no Mac ou no Linux, use o arquivo de abertura que está nesta mesma pasta:
+    Abrir no Windows, Abrir no Mac ou Abrir no Linux. O navegador, sozinho, não alcança o Catalyst Center.
+  </p>
+  <p id="error" class="error" hidden></p>
+  <form id="consulta" method="post" action="/consultar" autocomplete="off">
+    <label>Host
+      <input name="host" value="https://dnac.boticario.net" required>
+    </label>
+    <label>Usuário do Catalyst Center
+      <input name="username" autocomplete="username" required>
+    </label>
+    <label>Senha do Catalyst Center
+      <input name="password" type="password" autocomplete="current-password" required>
+    </label>
+    <label>Tipo de cliente
+      <select name="client_type" id="client-type">
+        <option value="">Todos</option>
+        <option value="Wired">Cabeado</option>
+        <option value="Wireless">Sem fio</option>
+      </select>
+    </label>
+    <label id="ssid-field">SSID da rede sem fio
+      <input name="ssids" placeholder="Um nome, ou vários separados por vírgula">
+    </label>
+    <label>Localidade
+      <input name="location" placeholder="Parte do nome. Vazio consulta todas.">
+    </label>
+    <div class="period">
+      <p>Período</p>
+      <div class="shortcuts">
+        <button type="button" data-hours="1">1 hora</button>
+        <button type="button" data-hours="3">3 horas</button>
+        <button type="button" data-hours="6">6 horas</button>
+        <button type="button" data-hours="12">12 horas</button>
+        <button type="button" data-hours="24">24 horas</button>
+      </div>
+      <div class="range">
+        <label>Início
+          <input name="inicio" type="datetime-local" required>
+        </label>
+        <label>Fim
+          <input name="fim" type="datetime-local" required>
+        </label>
+      </div>
+    </div>
+    <label>Consulta
+      <select name="consulta" id="consulta-tipo">
+        <option value="todos">Todos os clientes do período</option>
+        <option value="reincidentes">Reincidentes com conexão baixa</option>
+      </select>
+    </label>
+    <div id="conexao-field" class="range" hidden>
+      <label>Conexão de
+        <select name="conexao_de" id="conexao-de"></select>
+      </label>
+      <label>até
+        <select name="conexao_ate" id="conexao-ate"></select>
+      </label>
+    </div>
+    <label id="minimo-field" hidden>Mínimo de ocorrências
+      <input name="minimo" type="number" min="1" step="1" value="3">
+    </label>
+    <button class="submit" type="submit">Consultar</button>
+  </form>
+</main>
+<script>
+const form = document.getElementById("consulta");
+const typeField = document.getElementById("client-type");
+const ssidField = document.getElementById("ssid-field");
+const consultaField = document.getElementById("consulta-tipo");
+const minimoField = document.getElementById("minimo-field");
+const conexaoField = document.getElementById("conexao-field");
+const conexaoDe = document.getElementById("conexao-de");
+const conexaoAte = document.getElementById("conexao-ate");
+const errorBox = document.getElementById("error");
+const fileHelp = document.getElementById("file-help");
+const submitButton = form.querySelector(".submit");
+
+function pad(number) {
+  return String(number).padStart(2, "0");
+}
+function localValue(date) {
+  return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate())
+    + "T" + pad(date.getHours()) + ":" + pad(date.getMinutes());
+}
+function setRange(hours) {
+  const end = new Date();
+  const start = new Date(end.getTime() - hours * 60 * 60 * 1000);
+  form.fim.value = localValue(end);
+  form.inicio.value = localValue(start);
+}
+function fillScores(select, selected) {
+  for (let score = 1; score <= 10; score += 1) {
+    const option = document.createElement("option");
+    option.value = String(score);
+    option.textContent = String(score);
+    option.selected = score === selected;
+    select.append(option);
+  }
+}
+fillScores(conexaoDe, 1);
+fillScores(conexaoAte, 7);
+
+function syncFields() {
+  ssidField.hidden = typeField.value === "Wired";
+  const recurring = consultaField.value === "reincidentes";
+  minimoField.hidden = !recurring;
+  conexaoField.hidden = !recurring;
+}
+function showError(message) {
+  errorBox.hidden = !message;
+  errorBox.textContent = message || "";
+}
+
+if (location.protocol === "file:") {
+  fileHelp.hidden = false;
+}
+setRange(24);
+typeField.addEventListener("change", syncFields);
+consultaField.addEventListener("change", syncFields);
+syncFields();
+document.querySelectorAll("[data-hours]").forEach((button) => {
+  button.addEventListener("click", () => setRange(Number(button.dataset.hours)));
+});
+
+form.addEventListener("submit", async (event) => {
+  if (location.protocol === "file:") {
+    event.preventDefault();
+    showError("Abra a consulta pelo arquivo Abrir no Windows, Abrir no Mac ou Abrir no Linux, nesta mesma pasta.");
+    return;
+  }
+  event.preventDefault();
+  showError("");
+  submitButton.disabled = true;
+  submitButton.textContent = "Consultando...";
+  try {
+    const response = await fetch("/consultar", {
+      method: "POST",
+      body: new URLSearchParams(new FormData(form)),
+      headers: { "Accept": "application/json, text/html" }
+    });
+    const type = response.headers.get("content-type") || "";
+    if (type.includes("application/json")) {
+      const data = await response.json();
+      showError(data.error || "A consulta não foi concluída.");
+      return;
+    }
+    document.open();
+    document.write(await response.text());
+    document.close();
+  } catch (error) {
+    showError("Não foi possível falar com a página local. Abra pelo arquivo do seu sistema, nesta mesma pasta.");
+  } finally {
+    if (document.body.contains(submitButton)) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Consultar";
+    }
+  }
+});
+</script>
+</body>
+</html>

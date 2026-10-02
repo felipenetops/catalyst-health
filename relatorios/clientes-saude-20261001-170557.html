@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saúde dos clientes</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #eef2f4;
+    --card: #ffffff;
+    --ink: #1c2830;
+    --muted: #5c6b76;
+    --line: #d5dee4;
+    --head: #f7fafb;
+    --good: #0f7a45;
+    --good-bg: #e5f6ec;
+    --fair: #9a6200;
+    --fair-bg: #fff4d6;
+    --poor: #b42318;
+    --poor-bg: #fdecea;
+    --idle: #5c6b76;
+    --idle-bg: #eef2f4;
+    --accent: #0e5f73;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  header, main { padding: 20px 24px; }
+  header { padding-bottom: 0; }
+  h1 { margin: 0 0 6px; font-size: 1.45rem; font-weight: 650; }
+  .subtitle { margin: 0; color: var(--muted); font-size: 0.92rem; }
+  .toolbar, .cards { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+  .toolbar { margin: 16px 0; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--muted); }
+  input[type="search"], select {
+    font: inherit;
+    color: var(--ink);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 220px;
+  }
+  select { min-width: 160px; }
+  button {
+    font: inherit;
+    background: var(--card);
+    color: var(--accent);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  .cards { margin-bottom: 14px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    min-width: 140px;
+  }
+  .card b { display: block; font-size: 1.25rem; }
+  .card span { color: var(--muted); font-size: 0.78rem; }
+  .hint { color: var(--muted); font-size: 0.82rem; margin: 0 0 10px; }
+  .table-wrap {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: auto;
+    max-height: calc(100vh - 280px);
+  }
+  table { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+  th, td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+    text-align: left;
+    font-size: 0.88rem;
+    background: var(--card);
+  }
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--head);
+    vertical-align: top;
+    min-width: 140px;
+  }
+  th:first-child, td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+  th:first-child { z-index: 3; }
+  th.drag-over { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .drag {
+    cursor: grab;
+    color: var(--muted);
+    user-select: none;
+    border: 0;
+    background: transparent;
+    padding: 0 2px;
+    font-size: 1rem;
+    line-height: 1;
+  }
+  .sort {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-weight: 650;
+    padding: 0;
+    cursor: pointer;
+  }
+  .col-filter {
+    width: 100%;
+    min-width: 0;
+    font: inherit;
+    font-size: 0.78rem;
+    padding: 4px 6px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .pill {
+    display: inline-block;
+    min-width: 1.6rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 650;
+    text-align: center;
+  }
+  .good { color: var(--good); background: var(--good-bg); }
+  .fair { color: var(--fair); background: var(--fair-bg); }
+  .poor { color: var(--poor); background: var(--poor-bg); }
+  .idle, .none { color: var(--idle); background: var(--idle-bg); }
+  .empty { padding: 28px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <p class="subtitle" id="subtitle"></p>
+</header>
+<main>
+  <div class="toolbar">
+    <label>Busca geral
+      <input id="global" type="search" placeholder="MAC, localidade, SSID, usuário...">
+    </label>
+    <label>Saúde
+      <select id="health">
+        <option value="">Todas</option>
+        <option value="good">Boa</option>
+        <option value="fair">Regular</option>
+        <option value="poor">Ruim</option>
+        <option value="idle">Inativa ou sem dados</option>
+      </select>
+    </label>
+    <button id="reset" type="button">Restaurar colunas</button>
+  </div>
+  <div class="cards" id="cards"></div>
+  <p class="hint">Arraste o controle ↔ para mover a coluna na horizontal. A tabela também rola para o lado. Cada coluna tem o próprio filtro.</p>
+  <div class="table-wrap">
+    <table>
+      <thead id="head"></thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+</main>
+<script id="payload" type="application/json">{"title": "Assurance — Saúde dos clientes", "subtitle": "Serra · sem fio · SSID rfboti1 · 30/09/2026 17:05 – 01/10/2026 17:05 · https://dnac.boticario.net · CSV: /home/felipeps/Documentos/Automações/catalyst-health/relatorios/clientes-saude-20261001-170557.csv", "columns": [{"key": "macAddress", "label": "MAC", "kind": "text"}, {"key": "name", "label": "Nome", "kind": "text"}, {"key": "username", "label": "Usuário", "kind": "text"}, {"key": "userId", "label": "ID do usuário", "kind": "text"}, {"key": "type", "label": "Tipo", "kind": "text"}, {"key": "connectionStatus", "label": "Status", "kind": "text"}, {"key": "overallScore", "label": "Saúde", "kind": "score"}, {"key": "onboardingScore", "label": "Onboarding", "kind": "score"}, {"key": "connectedScore", "label": "Conectividade", "kind": "score"}, {"key": "ipv4Address", "label": "IPv4", "kind": "text"}, {"key": "ipv6Addresses", "label": "IPv6", "kind": "text"}, {"key": "siteHierarchy", "label": "Localidade", "kind": "text"}, {"key": "osType", "label": "Sistema", "kind": "text"}, {"key": "osVersion", "label": "Versão do SO", "kind": "text"}, {"key": "vendor", "label": "Fabricante", "kind": "text"}, {"key": "deviceType", "label": "Tipo de dispositivo", "kind": "text"}, {"key": "formFactor", "label": "Formato", "kind": "text"}, {"key": "connectedNetworkDeviceName", "label": "Dispositivo conectado", "kind": "text"}, {"key": "connectedNetworkDeviceManagementIp", "label": "IP do dispositivo", "kind": "text"}, {"key": "connectedNetworkDeviceType", "label": "Tipo do dispositivo", "kind": "text"}, {"key": "interfaceName", "label": "Interface", "kind": "text"}, {"key": "ssid", "label": "SSID", "kind": "text"}, {"key": "band", "label": "Banda", "kind": "text"}, {"key": "rssi", "label": "RSSI (dBm)", "kind": "number"}, {"key": "snr", "label": "SNR (dB)", "kind": "number"}, {"key": "vlanId", "label": "VLAN", "kind": "text"}, {"key": "channel", "label": "Canal", "kind": "text"}, {"key": "protocol", "label": "Protocolo", "kind": "text"}, {"key": "authType", "label": "Autenticação", "kind": "text"}, {"key": "wlcName", "label": "WLC", "kind": "text"}, {"key": "usage", "label": "Uso (bytes)", "kind": "number"}, {"key": "txBytes", "label": "Enviados (bytes)", "kind": "number"}, {"key": "rxBytes", "label": "Recebidos (bytes)", "kind": "number"}, {"key": "sessionDuration", "label": "Duração da sessão", "kind": "text"}, {"key": "lastUpdatedTime", "label": "Atualizado em", "kind": "text"}, {"key": "tracked", "label": "Rastreado", "kind": "text"}, {"key": "isPrivateMacAddress", "label": "MAC privado", "kind": "text"}], "rows": []}</script>
+<script>
+const data = JSON.parse(document.getElementById("payload").textContent);
+const initialColumns = data.columns.map((column) => ({...column}));
+const state = {
+  columns: data.columns.map((column) => ({...column})),
+  rows: data.rows,
+  sortKey: null,
+  sortDir: 1,
+  global: "",
+  health: "",
+  columnFilters: {},
+  dragKey: null,
+};
+
+document.getElementById("title").textContent = data.title;
+document.getElementById("subtitle").textContent = data.subtitle;
+
+const scoreKeys = ["worstConnectedScore", "overallScore", "connectedScore", "healthyClientsPercentage", "clientHealth", "clientHealthWired", "clientHealthWireless"];
+
+function healthValue(row) {
+  for (const key of scoreKeys) {
+    if (row[key] !== undefined && row[key] !== null && row[key] !== "") return Number(row[key]);
+  }
+  return null;
+}
+
+function band(value) {
+  if (value === null || value === undefined || value === "" || Number.isNaN(Number(value))) return "none";
+  const number = Number(value);
+  if (number < 0) return "none";
+  if (number === 0) return "idle";
+  if (number <= 10) {
+    if (number >= 8) return "good";
+    if (number >= 4) return "fair";
+    return "poor";
+  }
+  if (number >= 80) return "good";
+  if (number >= 40) return "fair";
+  return "poor";
+}
+
+function display(value, kind) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (kind === "percent") return String(value).includes("%") ? String(value) : String(value) + "%";
+  return String(value);
+}
+
+function visibleRows() {
+  const global = state.global.trim().toLowerCase();
+  return state.rows.filter((row) => {
+    if (state.health) {
+      const value = healthValue(row);
+      const rowBand = value === null ? "idle" : band(value);
+      if (state.health === "idle") {
+        if (rowBand !== "idle" && rowBand !== "none") return false;
+      } else if (rowBand !== state.health) {
+        return false;
+      }
+    }
+    for (const [key, text] of Object.entries(state.columnFilters)) {
+      if (!text) continue;
+      if (!String(row[key] ?? "").toLowerCase().includes(text.toLowerCase())) return false;
+    }
+    if (!global) return true;
+    return state.columns.some((column) => String(row[column.key] ?? "").toLowerCase().includes(global));
+  });
+}
+
+function sorted(rows) {
+  if (!state.sortKey) return rows;
+  const key = state.sortKey;
+  const direction = state.sortDir;
+  return rows.slice().sort((a, b) => {
+    const left = a[key];
+    const right = b[key];
+    const leftNumber = Number(left);
+    const rightNumber = Number(right);
+    const bothNumbers = left !== "" && right !== "" && !Number.isNaN(leftNumber) && !Number.isNaN(rightNumber)
+      && left !== undefined && right !== undefined && left !== null && right !== null;
+    if (bothNumbers) return (leftNumber - rightNumber) * direction;
+    return String(left ?? "").localeCompare(String(right ?? ""), "pt-BR", {numeric: true}) * direction;
+  });
+}
+
+function renderCards(rows) {
+  const cards = [{label: "Linhas visíveis", value: String(rows.length)}];
+  const types = rows.map((row) => String(row.type || ""));
+  const wired = types.filter((item) => item.toLowerCase() === "wired").length;
+  const wireless = types.filter((item) => item.toLowerCase() === "wireless").length;
+  if (wired || wireless) {
+    cards.push({label: "Cabeados", value: String(wired)});
+    cards.push({label: "Sem fio", value: String(wireless)});
+  }
+  if (rows.some((row) => row.numberOfClients !== undefined)) {
+    const total = rows.reduce((sum, row) => sum + (Number(row.numberOfClients) || 0), 0);
+    cards.push({label: "Clientes", value: String(total)});
+  }
+  const scores = rows.map(healthValue).filter((value) => value !== null && !Number.isNaN(value) && value >= 0);
+  if (scores.length) {
+    const average = scores.reduce((sum, value) => sum + value, 0) / scores.length;
+    cards.push({label: "Saúde média", value: average.toFixed(1)});
+  }
+  const host = document.getElementById("cards");
+  host.replaceChildren();
+  for (const card of cards) {
+    const box = document.createElement("div");
+    box.className = "card";
+    const value = document.createElement("b");
+    value.textContent = card.value;
+    const label = document.createElement("span");
+    label.textContent = card.label;
+    box.append(value, label);
+    host.append(box);
+  }
+}
+
+function render() {
+  const head = document.getElementById("head");
+  const body = document.getElementById("body");
+  head.replaceChildren();
+  const headerRow = document.createElement("tr");
+  for (const column of state.columns) {
+    const cell = document.createElement("th");
+    cell.dataset.key = column.key;
+    const bar = document.createElement("div");
+    bar.className = "head";
+    const handle = document.createElement("button");
+    handle.type = "button";
+    handle.className = "drag";
+    handle.draggable = true;
+    handle.dataset.dragKey = column.key;
+    handle.title = "Arrastar coluna";
+    handle.setAttribute("aria-label", "Mover coluna " + column.label);
+    handle.textContent = "↔";
+    const sort = document.createElement("button");
+    sort.type = "button";
+    sort.className = "sort";
+    const mark = state.sortKey === column.key ? (state.sortDir > 0 ? " ↑" : " ↓") : "";
+    sort.textContent = column.label + mark;
+    sort.addEventListener("click", () => {
+      if (state.sortKey === column.key) state.sortDir *= -1;
+      else { state.sortKey = column.key; state.sortDir = 1; }
+      render();
+    });
+    bar.append(handle, sort);
+    const filter = document.createElement("input");
+    filter.className = "col-filter";
+    filter.type = "search";
+    filter.placeholder = "Filtrar";
+    filter.value = state.columnFilters[column.key] || "";
+    filter.addEventListener("input", () => {
+      state.columnFilters[column.key] = filter.value;
+      renderBody();
+    });
+    cell.append(bar, filter);
+    cell.addEventListener("dragover", (event) => {
+      if (!state.dragKey) return;
+      event.preventDefault();
+      cell.classList.add("drag-over");
+    });
+    cell.addEventListener("dragleave", () => cell.classList.remove("drag-over"));
+    cell.addEventListener("drop", (event) => {
+      event.preventDefault();
+      cell.classList.remove("drag-over");
+      moveColumn(state.dragKey, column.key);
+    });
+    headerRow.append(cell);
+  }
+  head.append(headerRow);
+  renderBody();
+}
+
+function renderBody() {
+  const body = document.getElementById("body");
+  const rows = sorted(visibleRows());
+  renderCards(rows);
+  body.replaceChildren();
+  if (!state.columns.length) {
+    const line = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 1;
+    cell.className = "empty";
+    cell.textContent = "A consulta não trouxe colunas para exibir.";
+    line.append(cell);
+    body.append(line);
+    return;
+  }
+  if (!rows.length) {
+    const line = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = state.columns.length;
+    cell.className = "empty";
+    cell.textContent = "Nenhum registro para o filtro atual.";
+    line.append(cell);
+    body.append(line);
+    return;
+  }
+  for (const row of rows) {
+    const line = document.createElement("tr");
+    for (const column of state.columns) {
+      const cell = document.createElement("td");
+      const value = row[column.key];
+      if (column.kind === "score" || column.kind === "percent") {
+        const pill = document.createElement("span");
+        pill.className = "pill " + band(value);
+        pill.textContent = display(value, column.kind);
+        cell.append(pill);
+      } else {
+        cell.textContent = display(value, column.kind);
+      }
+      line.append(cell);
+    }
+    body.append(line);
+  }
+}
+
+function moveColumn(fromKey, toKey) {
+  if (!fromKey || fromKey === toKey) return;
+  const from = state.columns.findIndex((column) => column.key === fromKey);
+  const to = state.columns.findIndex((column) => column.key === toKey);
+  if (from < 0 || to < 0) return;
+  const [column] = state.columns.splice(from, 1);
+  state.columns.splice(to, 0, column);
+  state.dragKey = null;
+  render();
+}
+
+document.addEventListener("dragstart", (event) => {
+  const handle = event.target.closest("[data-drag-key]");
+  if (!handle) return;
+  state.dragKey = handle.dataset.dragKey;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", state.dragKey);
+});
+document.addEventListener("dragend", () => { state.dragKey = null; });
+
+document.getElementById("global").addEventListener("input", (event) => {
+  state.global = event.target.value;
+  renderBody();
+});
+document.getElementById("health").addEventListener("change", (event) => {
+  state.health = event.target.value;
+  renderBody();
+});
+document.getElementById("reset").addEventListener("click", () => {
+  state.columns = initialColumns.map((column) => ({...column}));
+  state.sortKey = null;
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
