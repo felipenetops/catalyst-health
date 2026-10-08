@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saúde dos clientes</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #eef2f4;
+    --card: #ffffff;
+    --ink: #1c2830;
+    --muted: #5c6b76;
+    --line: #d5dee4;
+    --head: #f7fafb;
+    --good: #0f7a45;
+    --good-bg: #e5f6ec;
+    --fair: #9a6200;
+    --fair-bg: #fff4d6;
+    --poor: #b42318;
+    --poor-bg: #fdecea;
+    --idle: #5c6b76;
+    --idle-bg: #eef2f4;
+    --accent: #0e5f73;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  header, main { padding: 20px 24px; }
+  header { padding-bottom: 0; }
+  h1 { margin: 0 0 6px; font-size: 1.45rem; font-weight: 650; }
+  .subtitle { margin: 0; color: var(--muted); font-size: 0.92rem; }
+  .toolbar, .cards { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+  .toolbar { margin: 16px 0; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--muted); }
+  input[type="search"], select {
+    font: inherit;
+    color: var(--ink);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 220px;
+  }
+  select { min-width: 160px; }
+  button {
+    font: inherit;
+    background: var(--card);
+    color: var(--accent);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  .cards { margin-bottom: 14px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    min-width: 140px;
+  }
+  .card b { display: block; font-size: 1.25rem; }
+  .card span { color: var(--muted); font-size: 0.78rem; }
+  .hint { color: var(--muted); font-size: 0.82rem; margin: 0 0 10px; }
+  .table-wrap {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: auto;
+    max-height: calc(100vh - 280px);
+  }
+  table { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+  th, td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+    text-align: left;
+    font-size: 0.88rem;
+    background: var(--card);
+  }
+  th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--head);
+    vertical-align: top;
+    min-width: 140px;
+  }
+  th:first-child, td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+  th:first-child { z-index: 3; }
+  th.drag-over { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .drag {
+    cursor: grab;
+    color: var(--muted);
+    user-select: none;
+    border: 0;
+    background: transparent;
+    padding: 0 2px;
+    font-size: 1rem;
+    line-height: 1;
+  }
+  .sort {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-weight: 650;
+    padding: 0;
+    cursor: pointer;
+  }
+  .col-filter {
+    width: 100%;
+    min-width: 0;
+    font: inherit;
+    font-size: 0.78rem;
+    padding: 4px 6px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .pill {
+    display: inline-block;
+    min-width: 1.6rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 650;
+    text-align: center;
+  }
+  .good { color: var(--good); background: var(--good-bg); }
+  .fair { color: var(--fair); background: var(--fair-bg); }
+  .poor { color: var(--poor); background: var(--poor-bg); }
+  .idle, .none { color: var(--idle); background: var(--idle-bg); }
+  .empty { padding: 28px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title"></h1>
+  <p class="subtitle" id="subtitle"></p>
+</header>
+<main>
+  <div class="toolbar">
+    <label>Busca geral
+      <input id="global" type="search" placeholder="MAC, localidade, SSID, usuário...">
+    </label>
+    <label>Saúde
+      <select id="health">
+        <option value="">Todas</option>
+        <option value="good">Boa</option>
+        <option value="fair">Regular</option>
+        <option value="poor">Ruim</option>
+        <option value="idle">Inativa ou sem dados</option>
+      </select>
+    </label>
+    <button id="reset" type="button">Restaurar colunas</button>
+  </div>
+  <div class="cards" id="cards"></div>
+  <p class="hint">Arraste o controle ↔ para mover a coluna na horizontal. A tabela também rola para o lado. Cada coluna tem o próprio filtro.</p>
+  <div class="table-wrap">
+    <table>
+      <thead id="head"></thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+</main>
+<script id="payload" type="application/json">{"title": "Clientes reincidentes com conexão baixa", "subtitle": "Serra · sem fio · SSID rfboti1 · conexão (1–7), mínimo 3 ocorrências · 02/10/2026 11:58 – 02/10/2026 12:58 · https://dnac.boticario.net · CSV: /home/felipeps/Documentos/Automações/catalyst-health/relatorios/clientes-reincidentes-20261002-125916.csv", "columns": [{"key": "occurrences", "label": "Ocorrências", "kind": "number"}, {"key": "worstConnectedScore", "label": "Pior conectividade", "kind": "score"}, {"key": "macAddress", "label": "MAC", "kind": "text"}, {"key": "name", "label": "Nome", "kind": "text"}, {"key": "username", "label": "Usuário", "kind": "text"}, {"key": "type", "label": "Tipo", "kind": "text"}, {"key": "siteHierarchy", "label": "Localidade", "kind": "text"}, {"key": "otherLocations", "label": "Outras localidades", "kind": "text"}, {"key": "ssid", "label": "SSID", "kind": "text"}, {"key": "connectedNetworkDeviceName", "label": "Dispositivo conectado", "kind": "text"}, {"key": "worstRssi", "label": "Pior RSSI (dBm)", "kind": "number"}, {"key": "worstSnr", "label": "Pior SNR (dB)", "kind": "number"}, {"key": "overallScore", "label": "Pior saúde", "kind": "score"}, {"key": "firstSeen", "label": "Primeira ocorrência", "kind": "text"}, {"key": "lastSeen", "label": "Última ocorrência", "kind": "text"}, {"key": "intervals", "label": "Intervalos", "kind": "text"}], "rows": [{"occurrences": 5, "worstConnectedScore": 3, "macAddress": "48:AD:9A:9E:7B:9A", "name": "N040PRRZ3", "username": "Ewerton.Ramos@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP29-ADM", "worstRssi": -68, "worstSnr": 26, "overallScore": 7, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 3, "macAddress": "54:E4:ED:04:AA:51", "name": "N0AUTPLTrMOeMTp", "username": "felipema@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP28-ADM", "worstRssi": -80, "worstSnr": 13, "overallScore": 7, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 3, "macAddress": "D4:E9:8A:6A:1D:23", "name": "D0CJ8XP04", "username": "D0CJ8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP26-ADM", "worstRssi": -70, "worstSnr": 25, "overallScore": 7, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 3, "macAddress": "D4:E9:8A:6A:1D:2D", "name": "D07J8XP04", "username": "D07J8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP29-ADM", "worstRssi": -69, "worstSnr": 25, "overallScore": 7, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 3, "macAddress": "D4:E9:8A:66:C2:90", "name": "D05J8XP04", "username": "D05J8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -68, "worstSnr": 26, "overallScore": 7, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 3, "macAddress": "D4:E9:8A:67:1A:97", "name": "D0SEA101871", "username": "D0SEA101871.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -70, "worstSnr": 24, "overallScore": 7, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "0C:91:92:BA:BA:17", "name": "N0AUTPLTLlcAjxr", "username": "jakson.oliveira@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/B7 - Mezanino Aero", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP23-AERO", "worstRssi": -57, "worstSnr": 36, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "3C:9C:0F:3D:33:BC", "name": "D069744", "username": "D069744.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/B7 - Mezanino Aero", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP23-AERO", "worstRssi": -60, "worstSnr": 34, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "28:0C:50:05:5B:22", "name": "N0AUTPLTUnPh0z4", "username": "N0AUTPLTUNPH0Z4$@boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP28-ADM", "worstRssi": -56, "worstSnr": 39, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "58:6D:67:51:64:DB", "name": "N0AUTPLTQgY1Oxf", "username": "arthur.manoel@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP28-ADM", "worstRssi": -57, "worstSnr": 36, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "5C:CD:5B:50:17:B1", "name": "N088257", "username": "rayssa.pimentel@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "otherLocations": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -62, "worstSnr": 32, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "64:D6:9A:8E:87:94", "name": "AGB002772", "username": "AGB002772.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP01-ADM", "worstRssi": -65, "worstSnr": 30, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:66:A3:28", "name": "N0SEA101877", "username": "hemilly.piantavinha@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP28-ADM", "worstRssi": -57, "worstSnr": 37, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:66:C2:68", "name": "D0J8XP04", "username": "D0J8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP26-ADM", "worstRssi": -65, "worstSnr": 30, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:66:C5:42", "name": "D08H8XP04", "username": "D08H8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP26-ADM", "worstRssi": -66, "worstSnr": 29, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:6A:E3:48", "name": "N0CYCXP04", "username": "Bruno.A.Silva@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP28-ADM", "worstRssi": -61, "worstSnr": 32, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "00:D7:6D:18:E4:21", "name": "N0BBR0ZL3", "username": "N0BBR0ZL3$@boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP56-ARM", "worstRssi": -52, "worstSnr": 42, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "00:D7:6D:1B:0C:6F", "name": "N0SEA93824", "username": "jozeara.sampaio@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP41-ARM", "worstRssi": -60, "worstSnr": 33, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "00:D7:6D:37:50:FA", "name": "N02T952L3", "username": "N02T952L3.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP56-ARM", "worstRssi": -57, "worstSnr": 37, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "28:A4:4A:FB:7A:A2", "name": "N0AUTPLTuZ2c1DY", "username": "felipe.viana@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP56-ARM", "worstRssi": -62, "worstSnr": 32, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "4C:A9:54:21:AD:1D", "name": "N0SEA195404", "username": "rafaela.g.costa@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -66, "worstSnr": 28, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "4C:A9:54:21:AD:77", "name": "N0SEA196116", "username": "danilo.sgomes@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP40-ARM", "worstRssi": -63, "worstSnr": 31, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "4C:A9:54:22:2B:49", "name": "N0SEA196157", "username": "Nathalia.Pimentel@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP36-ARM", "worstRssi": -58, "worstSnr": 36, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "54:E4:ED:02:AA:CB", "name": "N0SEA190319", "username": "Edivania.Santos@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP56-ARM", "worstRssi": -63, "worstSnr": 31, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "58:6D:67:1C:A2:46", "name": "N05KD8034", "username": "caroline.s.garcia@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -62, "worstSnr": 32, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "58:6D:67:21:B8:21", "name": "N0DZD8034", "username": "daiane.santos@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -63, "worstSnr": 31, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "58:6D:67:4F:4B:BA", "name": "N0AUTPLTc0z8zWi", "username": "gabriel.wenceslau@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP07-ARM", "worstRssi": -56, "worstSnr": 36, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "64:32:A8:82:92:A4", "name": "N086499", "username": "srv.pizzattocdserra@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP35-ARM", "worstRssi": -50, "worstSnr": 44, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "64:6C:80:FF:C4:E9", "name": "D069746", "username": "D069746.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP57-ARM", "worstRssi": -61, "worstSnr": 34, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "64:6C:80:FF:FC:A7", "name": "D0SEA84651", "username": "D0SEA84651.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP20-ARM", "worstRssi": -65, "worstSnr": 29, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "64:6C:80:FF:FF:AB", "name": "D0SEA069710", "username": "D0SEA069710.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP21-ADM", "worstRssi": -66, "worstSnr": 30, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "AC:3D:CB:B1:C6:0A", "name": "N0AUTPLTZNVwnJz", "username": "N0AUTPLTZNVWNJZ$@boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP52-ADM", "worstRssi": -63, "worstSnr": 31, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:66:C4:98", "name": "D0SEA101900", "username": "D0SEA101900$@boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP35-ARM", "worstRssi": -51, "worstSnr": 43, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:66:C4:DE", "name": "D0FH8XP04", "username": "D0FH8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP35-ARM", "worstRssi": -50, "worstSnr": 44, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:66:C5:3D", "name": "D0BH8XP04", "username": "D0BH8XP04$@boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP35-ARM", "worstRssi": -46, "worstSnr": 48, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:67:1A:D8", "name": "D0SIA101875", "username": "D0SIA101875.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP32-ARM", "worstRssi": -56, "worstSnr": 37, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:67:28:89", "name": "D0SEA101891", "username": "D0SEA101891.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP34-ARM", "worstRssi": -52, "worstSnr": 42, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:67:76:81", "name": "D0SEA101874", "username": "D0SEA101874.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP40-ARM", "worstRssi": -63, "worstSnr": 31, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:67:D3:60", "name": "D0GJ8XP04", "username": "D0GJ8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP36-ARM", "worstRssi": -62, "worstSnr": 32, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:69:69:E6", "name": "D05H8XP04", "username": "D05H8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP35-ARM", "worstRssi": -51, "worstSnr": 42, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:69:9F:E2", "name": "D03J8XP04", "username": "D03J8XP04$@boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -61, "worstSnr": 33, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:69:A0:3C", "name": "D09H8XP04", "username": "D09H8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP40-ARM", "worstRssi": -51, "worstSnr": 43, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:69:A0:78", "name": "D06H8XP04", "username": "D06H8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP32-ARM", "worstRssi": -52, "worstSnr": 42, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:69:CD:37", "name": "D09J8XP04", "username": "D09J8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP21-ADM", "worstRssi": -42, "worstSnr": 53, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 5, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:6A:1D:E1", "name": "D0DJ8XP04", "username": "D0DJ8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP05-ARM", "worstRssi": -60, "worstSnr": 34, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 4, "worstConnectedScore": 6, "macAddress": "00:D7:6D:16:B6:C4", "name": "N0139637", "username": "Bruno.Vitoria@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -64, "worstSnr": 30, "overallScore": 10, "firstSeen": "02/10/2026 12:10", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 4, "worstConnectedScore": 6, "macAddress": "00:D7:6D:42:B3:A5", "name": "N0SEA95616", "username": "leiliane.costa@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP41-ARM", "worstRssi": -59, "worstSnr": 34, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:46", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46"}, {"occurrences": 4, "worstConnectedScore": 6, "macAddress": "5C:CD:5B:50:10:E0", "name": "N090216", "username": "tania.costa@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP57-ARM", "worstRssi": -55, "worstSnr": 35, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:46", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46"}, {"occurrences": 4, "worstConnectedScore": 6, "macAddress": "64:D6:9A:7A:78:B7", "name": "N0SEA136007", "username": "N0SEA136007.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP45-ARM", "worstRssi": -58, "worstSnr": 36, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:46", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46"}, {"occurrences": 4, "worstConnectedScore": 6, "macAddress": "6C:F6:DA:6D:C5:A9", "name": "N0AUTPLT5CR26dn", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP52-ADM", "worstRssi": -53, "worstSnr": 42, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:46", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46"}, {"occurrences": 4, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:67:7D:E8", "name": "D0GG8XP04", "username": "D0GG8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -55, "worstSnr": 39, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:46", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46"}, {"occurrences": 4, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:69:9F:F1", "name": "D0CG8XP04", "username": "D0CG8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP41-ARM", "worstRssi": -62, "worstSnr": 32, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34; 02/10/2026 12:46–12:58"}, {"occurrences": 3, "worstConnectedScore": 3, "macAddress": "D4:E9:8A:66:C4:89", "name": "D0SEA101893", "username": "D0SEA101893$@boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -68, "worstSnr": 26, "overallScore": 7, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:34", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34"}, {"occurrences": 3, "worstConnectedScore": 6, "macAddress": "04:CF:4B:B4:A3:20", "name": "N0143663", "username": "bruna.fernandes@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Mezanino ADM", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP28-ADM", "worstRssi": -58, "worstSnr": 36, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:34", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34"}, {"occurrences": 3, "worstConnectedScore": 6, "macAddress": "5C:CD:5B:50:B6:7B", "name": "N0SEA89880", "username": "dashboardtvserra@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -65, "worstSnr": 29, "overallScore": 10, "firstSeen": "02/10/2026 12:22", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 3, "worstConnectedScore": 6, "macAddress": "BC:38:98:12:00:93", "name": "N0SEA157982", "username": "douglas.paula@grupoboticario.com.br", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP52-ADM", "worstRssi": -57, "worstSnr": 37, "overallScore": 10, "firstSeen": "02/10/2026 12:22", "lastSeen": "02/10/2026 12:58", "intervals": "02/10/2026 12:22–12:34; 02/10/2026 12:34–12:46; 02/10/2026 12:46–12:58"}, {"occurrences": 3, "worstConnectedScore": 6, "macAddress": "D4:E9:8A:66:C5:1F", "name": "D0HH8XP04", "username": "D0HH8XP04.boticario.net", "type": "Wireless", "siteHierarchy": "Global/Brasil/Espirito Santo/Serra/CD - Multi B/Terreo", "ssid": "rfboti1", "connectedNetworkDeviceName": "BRA-ES-SEA1-AP39-ARM", "worstRssi": -53, "worstSnr": 41, "overallScore": 10, "firstSeen": "02/10/2026 11:58", "lastSeen": "02/10/2026 12:34", "intervals": "02/10/2026 11:58–12:10; 02/10/2026 12:10–12:22; 02/10/2026 12:22–12:34"}]}</script>
+<script>
+const data = JSON.parse(document.getElementById("payload").textContent);
+const initialColumns = data.columns.map((column) => ({...column}));
+const state = {
+  columns: data.columns.map((column) => ({...column})),
+  rows: data.rows,
+  sortKey: null,
+  sortDir: 1,
+  global: "",
+  health: "",
+  columnFilters: {},
+  dragKey: null,
+};
+
+document.getElementById("title").textContent = data.title;
+document.getElementById("subtitle").textContent = data.subtitle;
+
+const scoreKeys = ["worstConnectedScore", "overallScore", "connectedScore", "healthyClientsPercentage", "clientHealth", "clientHealthWired", "clientHealthWireless"];
+
+function healthValue(row) {
+  for (const key of scoreKeys) {
+    if (row[key] !== undefined && row[key] !== null && row[key] !== "") return Number(row[key]);
+  }
+  return null;
+}
+
+function band(value) {
+  if (value === null || value === undefined || value === "" || Number.isNaN(Number(value))) return "none";
+  const number = Number(value);
+  if (number < 0) return "none";
+  if (number === 0) return "idle";
+  if (number <= 10) {
+    if (number >= 8) return "good";
+    if (number >= 4) return "fair";
+    return "poor";
+  }
+  if (number >= 80) return "good";
+  if (number >= 40) return "fair";
+  return "poor";
+}
+
+function display(value, kind) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (kind === "percent") return String(value).includes("%") ? String(value) : String(value) + "%";
+  return String(value);
+}
+
+function visibleRows() {
+  const global = state.global.trim().toLowerCase();
+  return state.rows.filter((row) => {
+    if (state.health) {
+      const value = healthValue(row);
+      const rowBand = value === null ? "idle" : band(value);
+      if (state.health === "idle") {
+        if (rowBand !== "idle" && rowBand !== "none") return false;
+      } else if (rowBand !== state.health) {
+        return false;
+      }
+    }
+    for (const [key, text] of Object.entries(state.columnFilters)) {
+      if (!text) continue;
+      if (!String(row[key] ?? "").toLowerCase().includes(text.toLowerCase())) return false;
+    }
+    if (!global) return true;
+    return state.columns.some((column) => String(row[column.key] ?? "").toLowerCase().includes(global));
+  });
+}
+
+function sorted(rows) {
+  if (!state.sortKey) return rows;
+  const key = state.sortKey;
+  const direction = state.sortDir;
+  return rows.slice().sort((a, b) => {
+    const left = a[key];
+    const right = b[key];
+    const leftNumber = Number(left);
+    const rightNumber = Number(right);
+    const bothNumbers = left !== "" && right !== "" && !Number.isNaN(leftNumber) && !Number.isNaN(rightNumber)
+      && left !== undefined && right !== undefined && left !== null && right !== null;
+    if (bothNumbers) return (leftNumber - rightNumber) * direction;
+    return String(left ?? "").localeCompare(String(right ?? ""), "pt-BR", {numeric: true}) * direction;
+  });
+}
+
+function renderCards(rows) {
+  const cards = [{label: "Linhas visíveis", value: String(rows.length)}];
+  const types = rows.map((row) => String(row.type || ""));
+  const wired = types.filter((item) => item.toLowerCase() === "wired").length;
+  const wireless = types.filter((item) => item.toLowerCase() === "wireless").length;
+  if (wired || wireless) {
+    cards.push({label: "Cabeados", value: String(wired)});
+    cards.push({label: "Sem fio", value: String(wireless)});
+  }
+  if (rows.some((row) => row.numberOfClients !== undefined)) {
+    const total = rows.reduce((sum, row) => sum + (Number(row.numberOfClients) || 0), 0);
+    cards.push({label: "Clientes", value: String(total)});
+  }
+  const scores = rows.map(healthValue).filter((value) => value !== null && !Number.isNaN(value) && value >= 0);
+  if (scores.length) {
+    const average = scores.reduce((sum, value) => sum + value, 0) / scores.length;
+    cards.push({label: "Saúde média", value: average.toFixed(1)});
+  }
+  const host = document.getElementById("cards");
+  host.replaceChildren();
+  for (const card of cards) {
+    const box = document.createElement("div");
+    box.className = "card";
+    const value = document.createElement("b");
+    value.textContent = card.value;
+    const label = document.createElement("span");
+    label.textContent = card.label;
+    box.append(value, label);
+    host.append(box);
+  }
+}
+
+function render() {
+  const head = document.getElementById("head");
+  const body = document.getElementById("body");
+  head.replaceChildren();
+  const headerRow = document.createElement("tr");
+  for (const column of state.columns) {
+    const cell = document.createElement("th");
+    cell.dataset.key = column.key;
+    const bar = document.createElement("div");
+    bar.className = "head";
+    const handle = document.createElement("button");
+    handle.type = "button";
+    handle.className = "drag";
+    handle.draggable = true;
+    handle.dataset.dragKey = column.key;
+    handle.title = "Arrastar coluna";
+    handle.setAttribute("aria-label", "Mover coluna " + column.label);
+    handle.textContent = "↔";
+    const sort = document.createElement("button");
+    sort.type = "button";
+    sort.className = "sort";
+    const mark = state.sortKey === column.key ? (state.sortDir > 0 ? " ↑" : " ↓") : "";
+    sort.textContent = column.label + mark;
+    sort.addEventListener("click", () => {
+      if (state.sortKey === column.key) state.sortDir *= -1;
+      else { state.sortKey = column.key; state.sortDir = 1; }
+      render();
+    });
+    bar.append(handle, sort);
+    const filter = document.createElement("input");
+    filter.className = "col-filter";
+    filter.type = "search";
+    filter.placeholder = "Filtrar";
+    filter.value = state.columnFilters[column.key] || "";
+    filter.addEventListener("input", () => {
+      state.columnFilters[column.key] = filter.value;
+      renderBody();
+    });
+    cell.append(bar, filter);
+    cell.addEventListener("dragover", (event) => {
+      if (!state.dragKey) return;
+      event.preventDefault();
+      cell.classList.add("drag-over");
+    });
+    cell.addEventListener("dragleave", () => cell.classList.remove("drag-over"));
+    cell.addEventListener("drop", (event) => {
+      event.preventDefault();
+      cell.classList.remove("drag-over");
+      moveColumn(state.dragKey, column.key);
+    });
+    headerRow.append(cell);
+  }
+  head.append(headerRow);
+  renderBody();
+}
+
+function renderBody() {
+  const body = document.getElementById("body");
+  const rows = sorted(visibleRows());
+  renderCards(rows);
+  body.replaceChildren();
+  if (!state.columns.length) {
+    const line = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 1;
+    cell.className = "empty";
+    cell.textContent = "A consulta não trouxe colunas para exibir.";
+    line.append(cell);
+    body.append(line);
+    return;
+  }
+  if (!rows.length) {
+    const line = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = state.columns.length;
+    cell.className = "empty";
+    cell.textContent = "Nenhum registro para o filtro atual.";
+    line.append(cell);
+    body.append(line);
+    return;
+  }
+  for (const row of rows) {
+    const line = document.createElement("tr");
+    for (const column of state.columns) {
+      const cell = document.createElement("td");
+      const value = row[column.key];
+      if (column.kind === "score" || column.kind === "percent") {
+        const pill = document.createElement("span");
+        pill.className = "pill " + band(value);
+        pill.textContent = display(value, column.kind);
+        cell.append(pill);
+      } else {
+        cell.textContent = display(value, column.kind);
+      }
+      line.append(cell);
+    }
+    body.append(line);
+  }
+}
+
+function moveColumn(fromKey, toKey) {
+  if (!fromKey || fromKey === toKey) return;
+  const from = state.columns.findIndex((column) => column.key === fromKey);
+  const to = state.columns.findIndex((column) => column.key === toKey);
+  if (from < 0 || to < 0) return;
+  const [column] = state.columns.splice(from, 1);
+  state.columns.splice(to, 0, column);
+  state.dragKey = null;
+  render();
+}
+
+document.addEventListener("dragstart", (event) => {
+  const handle = event.target.closest("[data-drag-key]");
+  if (!handle) return;
+  state.dragKey = handle.dataset.dragKey;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", state.dragKey);
+});
+document.addEventListener("dragend", () => { state.dragKey = null; });
+
+document.getElementById("global").addEventListener("input", (event) => {
+  state.global = event.target.value;
+  renderBody();
+});
+document.getElementById("health").addEventListener("change", (event) => {
+  state.health = event.target.value;
+  renderBody();
+});
+document.getElementById("reset").addEventListener("click", () => {
+  state.columns = initialColumns.map((column) => ({...column}));
+  state.sortKey = null;
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

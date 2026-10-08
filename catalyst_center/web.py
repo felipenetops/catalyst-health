@@ -20,14 +20,19 @@ from catalyst_center.consultar import (
     DEFAULT_HOST,
     REPORT_DIR,
     _parse_client_type,
+    run_ap_lookup,
     run_consultation,
+    run_device_lookup,
 )
+from catalyst_center.lookup import classify_identifier, split_tokens
 
 PAGE_HOST = "127.0.0.1"
 PAGE_PORT = 8780
 PAGE_FILE = Path(__file__).resolve().parent.parent / "Consulta.html"
 _QUERY_LOCK = threading.Lock()
-_CSV_NAME = re.compile(r"^clientes-(?:saude|reincidentes)-\d{8}-\d{6}\.csv$")
+_CSV_NAME = re.compile(
+    r"^clientes-(?:saude|reincidentes|dispositivo|ap)-\d{8}-\d{6}\.csv$"
+)
 
 
 class ConsultationForm:
@@ -61,16 +66,72 @@ class ConsultationForm:
         self.minimum_occurrences = minimum_occurrences
         self.connection_low = connection_low
         self.connection_high = connection_high
+        self.tab = "clientes"
+
+
+class DeviceLookupForm:
+    def __init__(
+        self,
+        *,
+        host: str,
+        username: str,
+        password: str,
+        verify_ssl: bool,
+        query: str,
+        period_start: datetime,
+        period_end: datetime,
+    ) -> None:
+        self.tab = "dispositivo"
+        self.host = host
+        self.username = username
+        self.password = password
+        self.verify_ssl = verify_ssl
+        self.query = query
+        self.period_start = period_start
+        self.period_end = period_end
+
+
+class ApLookupForm:
+    def __init__(
+        self,
+        *,
+        host: str,
+        username: str,
+        password: str,
+        verify_ssl: bool,
+        query: str,
+        location: str,
+        period_start: datetime,
+        period_end: datetime,
+    ) -> None:
+        self.tab = "ap"
+        self.host = host
+        self.username = username
+        self.password = password
+        self.verify_ssl = verify_ssl
+        self.query = query
+        self.location = location
+        self.period_start = period_start
+        self.period_end = period_end
+
+
+def parse_page_form(
+    fields: Mapping[str, str], *, now: datetime | None = None
+) -> ConsultationForm | DeviceLookupForm | ApLookupForm:
+    """Lê a aba enviada pela página e valida só os campos dessa consulta."""
+    tab = fields.get("aba", "clientes").strip() or "clientes"
+    if tab == "clientes":
+        return parse_consultation_form(fields, now=now)
+    if tab == "dispositivo":
+        return _parse_device_form(fields, now=now)
+    if tab == "ap":
+        return _parse_ap_form(fields, now=now)
+    raise ValueError("Escolha uma das consultas: Clientes, Dispositivo ou Access point.")
 
 
 def parse_consultation_form(fields: Mapping[str, str], *, now: datetime | None = None) -> ConsultationForm:
-    """Lê o formulário. A senha só existe neste objeto e não é devolvida à página."""
-    clock = now or datetime.now()
-    host = fields.get("host", "").strip() or DEFAULT_HOST
-    username = fields.get("username", "").strip()
-    password = fields.get("password", "")
-    if not username or not password:
-        raise ValueError("Informe o usuário e a senha do Catalyst Center.")
+    """Lê o formulário de clientes. A senha só existe neste objeto e não é devolvida à página."""
+    host, username, password, period_start, period_end = _common_fields(fields, now)
     try:
         client_type = _parse_client_type(fields.get("client_type", ""))
     except ValueError as exc:
@@ -81,12 +142,6 @@ def parse_consultation_form(fields: Mapping[str, str], *, now: datetime | None =
     if client_type == "Wired":
         ssids = ()
     location = fields.get("location", "").strip()
-    period_start = _parse_datetime(fields.get("inicio", ""), "início")
-    period_end = _parse_datetime(fields.get("fim", ""), "fim")
-    if period_end <= period_start:
-        raise ValueError("O fim do período precisa ser depois do início.")
-    if period_end > clock + timedelta(minutes=1):
-        raise ValueError("O fim do período não pode ser no futuro.")
     recurring = fields.get("consulta", "todos") == "reincidentes"
     minimum = 3
     if recurring:
@@ -111,6 +166,63 @@ def parse_consultation_form(fields: Mapping[str, str], *, now: datetime | None =
         connection_low=connection_low,
         connection_high=connection_high,
     )
+
+
+def _parse_device_form(fields: Mapping[str, str], *, now: datetime | None = None) -> DeviceLookupForm:
+    host, username, password, period_start, period_end = _common_fields(fields, now)
+    query = fields.get("dispositivo", "").strip()
+    tokens = split_tokens(query)
+    if not tokens:
+        raise ValueError("Informe o MAC ou o IP do dispositivo.")
+    for token in tokens:
+        kind, _value = classify_identifier(token)
+        if kind == "name":
+            raise ValueError(f"{token} não é um MAC nem um IPv4.")
+    return DeviceLookupForm(
+        host=host,
+        username=username,
+        password=password,
+        verify_ssl=False,
+        query=query,
+        period_start=period_start,
+        period_end=period_end,
+    )
+
+
+def _parse_ap_form(fields: Mapping[str, str], *, now: datetime | None = None) -> ApLookupForm:
+    host, username, password, period_start, period_end = _common_fields(fields, now)
+    query = fields.get("ap", "").strip()
+    location = fields.get("ap_location", "").strip()
+    if not query and not location:
+        raise ValueError("Informe o access point ou uma localidade.")
+    return ApLookupForm(
+        host=host,
+        username=username,
+        password=password,
+        verify_ssl=False,
+        query=query,
+        location=location,
+        period_start=period_start,
+        period_end=period_end,
+    )
+
+
+def _common_fields(
+    fields: Mapping[str, str], now: datetime | None
+) -> tuple[str, str, str, datetime, datetime]:
+    clock = now or datetime.now()
+    host = fields.get("host", "").strip() or DEFAULT_HOST
+    username = fields.get("username", "").strip()
+    password = fields.get("password", "")
+    if not username or not password:
+        raise ValueError("Informe o usuário e a senha do Catalyst Center.")
+    period_start = _parse_datetime(fields.get("inicio", ""), "início")
+    period_end = _parse_datetime(fields.get("fim", ""), "fim")
+    if period_end <= period_start:
+        raise ValueError("O fim do período precisa ser depois do início.")
+    if period_end > clock + timedelta(minutes=1):
+        raise ValueError("O fim do período não pode ser no futuro.")
+    return host, username, password, period_start, period_end
 
 
 def serve(host: str = PAGE_HOST, port: int = PAGE_PORT, *, open_browser: bool = True) -> int:
@@ -166,7 +278,7 @@ class ConsultationHandler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length)
         fields = parse_request_fields(raw, self.headers.get("Content-Type", ""))
         try:
-            form = parse_consultation_form(fields)
+            form = parse_page_form(fields)
         except ValueError as exc:
             _send_json(self, {"error": str(exc)}, status=400)
             return
@@ -178,21 +290,43 @@ class ConsultationHandler(BaseHTTPRequestHandler):
             )
             return
         try:
-            csv_path, html_path, count = run_consultation(
-                host=form.host,
-                username=form.username,
-                password=form.password,
-                client_type=form.client_type,
-                ssids=form.ssids,
-                location=form.location,
-                period_start=form.period_start,
-                period_end=form.period_end,
-                recurring=form.recurring,
-                minimum_occurrences=form.minimum_occurrences,
-                connection_low=form.connection_low,
-                connection_high=form.connection_high,
-                verify_ssl=form.verify_ssl,
-            )
+            if isinstance(form, DeviceLookupForm):
+                csv_path, html_path, count = run_device_lookup(
+                    host=form.host,
+                    username=form.username,
+                    password=form.password,
+                    query=form.query,
+                    period_start=form.period_start,
+                    period_end=form.period_end,
+                    verify_ssl=form.verify_ssl,
+                )
+            elif isinstance(form, ApLookupForm):
+                csv_path, html_path, count = run_ap_lookup(
+                    host=form.host,
+                    username=form.username,
+                    password=form.password,
+                    query=form.query,
+                    location=form.location,
+                    period_start=form.period_start,
+                    period_end=form.period_end,
+                    verify_ssl=form.verify_ssl,
+                )
+            else:
+                csv_path, html_path, count = run_consultation(
+                    host=form.host,
+                    username=form.username,
+                    password=form.password,
+                    client_type=form.client_type,
+                    ssids=form.ssids,
+                    location=form.location,
+                    period_start=form.period_start,
+                    period_end=form.period_end,
+                    recurring=form.recurring,
+                    minimum_occurrences=form.minimum_occurrences,
+                    connection_low=form.connection_low,
+                    connection_high=form.connection_high,
+                    verify_ssl=form.verify_ssl,
+                )
         except AuthenticationError:
             _send_json(self, {"error": "Usuário ou senha recusados pelo Catalyst Center."}, status=401)
             return

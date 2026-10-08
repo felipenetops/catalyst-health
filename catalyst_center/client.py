@@ -220,6 +220,8 @@ class CatalystCenterClient:
         ssid: str | list[str] | None = None,
         site_id: str | list[str] | None = None,
         view: str | None = None,
+        mac_address: str | list[str] | None = None,
+        ipv4_address: str | list[str] | None = None,
         start_time: int | None = None,
         end_time: int | None = None,
         on_page: Callable[[int], None] | None = None,
@@ -242,6 +244,10 @@ class CatalystCenterClient:
             params["siteId"] = site_id
         if view:
             params["view"] = view
+        if mac_address:
+            params["macAddress"] = mac_address
+        if ipv4_address:
+            params["ipv4Address"] = ipv4_address
         if start_time is not None:
             params["startTime"] = start_time
         if end_time is not None:
@@ -273,6 +279,40 @@ class CatalystCenterClient:
             "dna/intent/api/v1/site-health",
             params or None,
             page_size=SITE_HEALTH_PAGE_SIZE,
+            on_page=on_page,
+        )
+
+    def list_network_devices(
+        self,
+        *,
+        family: str | None = None,
+        mac_address: str | list[str] | None = None,
+        management_ip: str | list[str] | None = None,
+        site_hierarchy: str | None = None,
+        views: list[str] | None = None,
+        start_time: int | None = None,
+        end_time: int | None = None,
+        on_page: Callable[[int], None] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Lista equipamentos de Assurance, inclusive access points e a saúde dos rádios."""
+        params: dict[str, Any] = {}
+        if family:
+            params["family"] = family
+        if mac_address:
+            params["macAddress"] = mac_address
+        if management_ip:
+            params["managementIpAddress"] = management_ip
+        if site_hierarchy:
+            params["siteHierarchy"] = site_hierarchy
+        if views:
+            params["view"] = views
+        if start_time is not None:
+            params["startTime"] = start_time
+        if end_time is not None:
+            params["endTime"] = end_time
+        return self.get_all(
+            "dna/data/api/v1/networkDevices",
+            params or None,
             on_page=on_page,
         )
 

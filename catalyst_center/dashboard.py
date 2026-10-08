@@ -214,7 +214,7 @@ const state = {
 document.getElementById("title").textContent = data.title;
 document.getElementById("subtitle").textContent = data.subtitle;
 
-const scoreKeys = ["worstConnectedScore", "overallScore", "connectedScore", "healthyClientsPercentage", "clientHealth", "clientHealthWired", "clientHealthWireless"];
+const scoreKeys = ["worstConnectedScore", "overallScore", "connectedScore", "overallHealthScore", "healthyClientsPercentage", "clientHealth", "clientHealthWired", "clientHealthWireless"];
 
 function healthValue(row) {
   for (const key of scoreKeys) {

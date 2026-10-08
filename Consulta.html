@@ -56,6 +56,10 @@
   }
   button.submit { background: #0e5f73; color: #fff; border-color: #0e5f73; }
   button:disabled { opacity: 0.6; cursor: wait; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tab[aria-selected="true"] { background: #0e5f73; color: #fff; border-color: #0e5f73; }
+  .hint { margin: 0; color: #5c6b76; font-size: 0.82rem; }
+  .panel { display: grid; gap: 14px; }
   .error {
     margin: 0;
     padding: 10px 12px;
@@ -68,7 +72,7 @@
 </head>
 <body>
 <main>
-  <h1>Assurance — Saúde dos clientes</h1>
+  <h1>Consultas do Catalyst Center</h1>
   <p class="intro">A senha é usada só nesta consulta e não fica gravada na página nem no relatório.</p>
   <p id="file-help" class="file-help" hidden>
     Para consultar no Windows, no Mac ou no Linux, use o arquivo de abertura que está nesta mesma pasta:
@@ -85,7 +89,15 @@
     <label>Senha do Catalyst Center
       <input name="password" type="password" autocomplete="current-password" required>
     </label>
-    <label>Tipo de cliente
+    <div class="tabs" role="tablist">
+      <button class="tab" type="button" id="tab-clientes" data-tab="clientes" aria-selected="true">Clientes</button>
+      <button class="tab" type="button" id="tab-dispositivo" data-tab="dispositivo" aria-selected="false">Dispositivo</button>
+      <button class="tab" type="button" id="tab-ap" data-tab="ap" aria-selected="false">Access point</button>
+    </div>
+    <input type="hidden" name="aba" id="aba" value="clientes">
+    <p class="hint" id="tab-hint">Clientes na rede, por cabo ou sem fio. O tipo de conexão é o filtro desta aba.</p>
+    <div class="panel" id="panel-clientes">
+    <label>Tipo de conexão
       <select name="client_type" id="client-type">
         <option value="">Todos</option>
         <option value="Wired">Cabeado</option>
@@ -98,6 +110,39 @@
     <label>Localidade
       <input name="location" placeholder="Parte do nome. Vazio consulta todas.">
     </label>
+    <label>Consulta
+      <select name="consulta" id="consulta-tipo">
+        <option value="todos">Todos os clientes do período</option>
+        <option value="reincidentes">Reincidentes com conexão baixa</option>
+      </select>
+    </label>
+    <div id="conexao-field" class="range" hidden>
+      <label>Conexão de
+        <select name="conexao_de" id="conexao-de"></select>
+      </label>
+      <label>até
+        <select name="conexao_ate" id="conexao-ate"></select>
+      </label>
+    </div>
+    <label id="minimo-field" hidden>Mínimo de ocorrências
+      <input name="minimo" type="number" min="1" step="1" value="3">
+    </label>
+    </div>
+    <div class="panel" id="panel-dispositivo" hidden>
+      <label>MAC ou IP do dispositivo
+        <input name="dispositivo" placeholder="AA:BB:CC:DD:EE:FF ou 10.1.1.10. Vários, separados por vírgula.">
+      </label>
+      <p class="hint">Traz a saúde da conexão daquele equipamento: score, SSID, AP, RSSI e SNR.</p>
+    </div>
+    <div class="panel" id="panel-ap" hidden>
+      <label>Access point
+        <input name="ap" placeholder="Nome, MAC ou IP. Vazio lista os APs da localidade.">
+      </label>
+      <label>Localidade do AP
+        <input name="ap_location" placeholder="Parte do nome. Opcional se o AP foi informado.">
+      </label>
+      <p class="hint">Traz a saúde vista pelo AP: estado, CPU, memória e cada rádio.</p>
+    </div>
     <div class="period">
       <p>Período</p>
       <div class="shortcuts">
@@ -116,23 +161,6 @@
         </label>
       </div>
     </div>
-    <label>Consulta
-      <select name="consulta" id="consulta-tipo">
-        <option value="todos">Todos os clientes do período</option>
-        <option value="reincidentes">Reincidentes com conexão baixa</option>
-      </select>
-    </label>
-    <div id="conexao-field" class="range" hidden>
-      <label>Conexão de
-        <select name="conexao_de" id="conexao-de"></select>
-      </label>
-      <label>até
-        <select name="conexao_ate" id="conexao-ate"></select>
-      </label>
-    </div>
-    <label id="minimo-field" hidden>Mínimo de ocorrências
-      <input name="minimo" type="number" min="1" step="1" value="3">
-    </label>
     <button class="submit" type="submit">Consultar</button>
   </form>
 </main>
@@ -148,6 +176,18 @@ const conexaoAte = document.getElementById("conexao-ate");
 const errorBox = document.getElementById("error");
 const fileHelp = document.getElementById("file-help");
 const submitButton = form.querySelector(".submit");
+const abaField = document.getElementById("aba");
+const tabHint = document.getElementById("tab-hint");
+const panels = {
+  clientes: document.getElementById("panel-clientes"),
+  dispositivo: document.getElementById("panel-dispositivo"),
+  ap: document.getElementById("panel-ap")
+};
+const hints = {
+  clientes: "Clientes na rede, por cabo ou sem fio. O tipo de conexão é o filtro desta aba.",
+  dispositivo: "A saúde da conexão de um equipamento, localizado pelo MAC ou pelo IP.",
+  ap: "A saúde vista pelo access point: estado, CPU, memória e rádios."
+};
 
 function pad(number) {
   return String(number).padStart(2, "0");
@@ -174,6 +214,16 @@ function fillScores(select, selected) {
 fillScores(conexaoDe, 1);
 fillScores(conexaoAte, 7);
 
+function showTab(name) {
+  abaField.value = name;
+  tabHint.textContent = hints[name];
+  for (const [key, panel] of Object.entries(panels)) {
+    panel.hidden = key !== name;
+  }
+  document.querySelectorAll(".tab").forEach((button) => {
+    button.setAttribute("aria-selected", button.dataset.tab === name ? "true" : "false");
+  });
+}
 function syncFields() {
   ssidField.hidden = typeField.value === "Wired";
   const recurring = consultaField.value === "reincidentes";
@@ -191,6 +241,13 @@ if (location.protocol === "file:") {
 setRange(24);
 typeField.addEventListener("change", syncFields);
 consultaField.addEventListener("change", syncFields);
+document.querySelectorAll(".tab").forEach((button) => {
+  button.addEventListener("click", () => {
+    showTab(button.dataset.tab);
+    showError("");
+  });
+});
+showTab("clientes");
 syncFields();
 document.querySelectorAll("[data-hours]").forEach((button) => {
   button.addEventListener("click", () => setRange(Number(button.dataset.hours)));

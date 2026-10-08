@@ -29,6 +29,7 @@ CLIENT_COLUMNS: list[tuple[str, str, str]] = [
     ("connectedNetworkDeviceName", "Dispositivo conectado", "text"),
     ("connectedNetworkDeviceManagementIp", "IP do dispositivo", "text"),
     ("connectedNetworkDeviceType", "Tipo do dispositivo", "text"),
+    ("apMac", "MAC do AP", "text"),
     ("interfaceName", "Interface", "text"),
     ("ssid", "SSID", "text"),
     ("band", "Banda", "text"),
@@ -223,6 +224,14 @@ def normalize_client(record: dict[str, Any]) -> dict[str, Any]:
                 record,
                 "connectedNetworkDeviceType",
                 "connectedNetworkDevice.connectedNetworkDeviceType",
+            )
+        ),
+        "apMac": _text(
+            _first(
+                record,
+                "apMac",
+                "connectedNetworkDeviceMac",
+                "connectedNetworkDevice.connectedNetworkDeviceMac",
             )
         ),
         "interfaceName": _text(

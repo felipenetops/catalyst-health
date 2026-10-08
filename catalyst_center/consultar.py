@@ -32,6 +32,7 @@ from catalyst_center.health import (
     normalize_site,
     select_columns,
 )
+from catalyst_center.lookup import fetch_access_points, fetch_device_connection
 from catalyst_center.recurrence import (
     aggregate_recurring,
     build_slices,
@@ -188,6 +189,97 @@ def run_consultation(
         minimum_occurrences=minimum_occurrences if recurring else None,
         connection_low=connection_low,
         connection_high=connection_high,
+        note=" ".join(notes),
+    )
+    return csv_path, html_path, len(rows)
+
+
+def run_device_lookup(
+    *,
+    host: str,
+    username: str,
+    password: str,
+    query: str,
+    period_start: datetime,
+    period_end: datetime,
+    verify_ssl: bool = False,
+) -> tuple[Path, Path, int]:
+    """Consulta a saúde da conexão de um cliente pelo MAC ou pelo IP."""
+    if period_end <= period_start:
+        raise CatalystCenterError("O fim do período precisa ser depois do início.")
+    if not verify_ssl:
+        _silence_tls_warnings()
+    client = CatalystCenterClient(
+        host,
+        username,
+        password,
+        verify_ssl=verify_ssl,
+        timeout=120,
+    )
+    client.authenticate()
+    rows, columns = fetch_device_connection(
+        client,
+        query=query,
+        period_start=period_start,
+        period_end=period_end,
+    )
+    csv_path, html_path = write_reports(
+        mode="device",
+        rows=rows,
+        columns=columns,
+        host=host,
+        location="",
+        client_type=None,
+        period_label=_period_label(period_start, period_end),
+        audience="dispositivo",
+        subject=query.strip(),
+    )
+    return csv_path, html_path, len(rows)
+
+
+def run_ap_lookup(
+    *,
+    host: str,
+    username: str,
+    password: str,
+    query: str,
+    location: str,
+    period_start: datetime,
+    period_end: datetime,
+    verify_ssl: bool = False,
+) -> tuple[Path, Path, int]:
+    """Consulta a saúde do access point e dos rádios."""
+    if period_end <= period_start:
+        raise CatalystCenterError("O fim do período precisa ser depois do início.")
+    if not verify_ssl:
+        _silence_tls_warnings()
+    client = CatalystCenterClient(
+        host,
+        username,
+        password,
+        verify_ssl=verify_ssl,
+        timeout=120,
+    )
+    client.authenticate()
+    notes: list[str] = []
+    rows, columns = fetch_access_points(
+        client,
+        query=query,
+        location=location,
+        period_start=period_start,
+        period_end=period_end,
+        notes=notes,
+    )
+    csv_path, html_path = write_reports(
+        mode="ap",
+        rows=rows,
+        columns=columns,
+        host=host,
+        location=location,
+        client_type=None,
+        period_label=_period_label(period_start, period_end),
+        audience="access point",
+        subject=query.strip(),
         note=" ".join(notes),
     )
     return csv_path, html_path, len(rows)
@@ -623,11 +715,18 @@ def write_reports(
     connection_low: int = 1,
     connection_high: int = 7,
     note: str = "",
+    audience: str = "",
+    subject: str = "",
 ) -> tuple[Path, Path]:
     moment = now or datetime.now()
     output_dir.mkdir(parents=True, exist_ok=True)
     stamp = moment.strftime("%Y%m%d-%H%M%S")
-    prefix = "clientes-reincidentes" if mode == "recurring" else "clientes-saude"
+    prefixes = {
+        "recurring": "clientes-reincidentes",
+        "device": "clientes-dispositivo",
+        "ap": "clientes-ap",
+    }
+    prefix = prefixes.get(mode, "clientes-saude")
     stem = f"{prefix}-{stamp}"
     csv_path = output_dir / f"{stem}.csv"
     html_path = output_dir / f"{stem}.html"
@@ -637,6 +736,10 @@ def write_reports(
         title = "Assurance — Saúde dos clientes por localidade"
     elif mode == "recurring":
         title = "Clientes reincidentes com conexão baixa"
+    elif mode == "device":
+        title = "Saúde da conexão do dispositivo"
+    elif mode == "ap":
+        title = "Saúde do access point"
     subtitle = _subtitle(
         host=host,
         location=location,
@@ -650,6 +753,8 @@ def write_reports(
         connection_high=connection_high,
         ssids=ssids,
         note=note,
+        audience=audience,
+        subject=subject,
     )
     html_path.write_text(
         render_dashboard(title=title, subtitle=subtitle, columns=columns, rows=rows),
@@ -687,11 +792,19 @@ def _subtitle(
     connection_high: int = 7,
     ssids: tuple[str, ...] = (),
     note: str = "",
+    audience: str = "",
+    subject: str = "",
 ) -> str:
-    kind = {"Wired": "cabeado", "Wireless": "sem fio"}.get(client_type or "", "todos os tipos")
-    place = location or "todas as localidades"
+    kind = audience or {"Wired": "cabeado", "Wireless": "sem fio"}.get(client_type or "", "todos os tipos")
+    if location:
+        place = location
+    elif audience:
+        place = "consulta pontual"
+    else:
+        place = "todas as localidades"
     when = period_label or moment.strftime("%d/%m/%Y %H:%M")
     network = f" · SSID {', '.join(ssids)}" if ssids else ""
+    target = f" · {subject}" if subject else ""
     focus = ""
     if recurring:
         low = min(connection_low, connection_high)
@@ -699,7 +812,7 @@ def _subtitle(
         times = minimum_occurrences if minimum_occurrences is not None else 3
         focus = f" · conexão ({low}–{high}), mínimo {times} ocorrências"
     detail = f" · {note}" if note else ""
-    return f"{place} · {kind}{network}{focus} · {when}{detail} · {host} · CSV: {csv_path}"
+    return f"{place} · {kind}{network}{target}{focus} · {when}{detail} · {host} · CSV: {csv_path}"
 
 
 def _prompt_period(
